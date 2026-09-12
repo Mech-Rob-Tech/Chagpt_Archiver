@@ -1,0 +1,99 @@
+cd ~/chatgpt_archive
+
+python - <<'PY'
+from pathlib import Path
+
+p = Path("copy_one_exact.py")
+s = p.read_text()
+
+# Remove the fixed "need 10 buttons" logic and replace the target section.
+start = s.index("    copies = page.get_by_role(")
+end = s.index("    target.scroll_into_view_if_needed()", start)
+
+new = '''    copies = page.get_by_role(
+        "button",
+        name="Copy"
+    )
+
+    print(f"✓ Initially visible Copy buttons: {copies.count()}")
+
+    # The target response begins with this exact text.
+    target_text = (
+        "Yes. I reviewed the uploaded output and checked "
+        "the current NIST position"
+    )
+
+    print("\\nSearching for target assistant response...")
+
+    target = None
+
+    # ChatGPT progressively mounts older windows.
+    # Keep moving upward until the target text becomes mounted.
+    for attempt in range(30):
+
+        # Look for the target text anywhere in the conversation.
+        matches = page.get_by_text(
+            target_text,
+            exact=False
+        )
+
+        if matches.count() > 0:
+            print(
+                f"✓ Target response mounted "
+                f"(upward attempt {attempt + 1})"
+            )
+
+            # Find the nearest ancestor that contains both
+            # the target response and a Copy button.
+            target = matches.first.locator(
+                "xpath=ancestor::*[.//button][1]"
+            ).get_by_role(
+                "button",
+                name="Copy"
+            ).first
+
+            if target.count() > 0:
+                break
+
+        # Move the REAL conversation scroller upward.
+        old_top = container.evaluate(
+            "el => el.scrollTop"
+        )
+
+        container.evaluate("""
+            el => {
+                el.scrollTop = Math.max(
+                    0,
+                    el.scrollTop - 5000
+                );
+            }
+        """)
+
+        time.sleep(1.5)
+
+        new_top = container.evaluate(
+            "el => el.scrollTop"
+        )
+
+        print(
+            f"  attempt {attempt + 1:02d} | "
+            f"scroll {old_top:.0f} -> {new_top:.0f} | "
+            f"Copy buttons: {page.get_by_role('button', name='Copy').count()}"
+        )
+
+    if target is None or target.count() == 0:
+        raise RuntimeError(
+            "Could not find the target assistant response."
+        )
+
+    print("✓ Exact assistant Copy button located")
+'''
+
+s = s[:start] + new + s[end:]
+
+p.write_text(s)
+
+print("✓ Patched dynamic target discovery")
+PY
+
+python copy_one_exact.py

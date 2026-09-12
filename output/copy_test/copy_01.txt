@@ -1,0 +1,45 @@
+cd ~/chatgpt_archive
+
+python - <<'PY'
+from pathlib import Path
+
+p = Path("copy_test.py")
+s = p.read_text()
+
+s = s.replace(
+    '''    container.evaluate(
+        "el => el.scrollTop = Math.max(0, el.scrollTop - 3500)"
+    )
+
+    time.sleep(2)
+
+    after_height = container.evaluate(
+        "el => el.scrollHeight"
+    )
+''',
+    '''    before_text = container.inner_text()
+
+    container.evaluate(
+        "el => el.scrollTop = Math.max(0, el.scrollTop - 6000)"
+    )
+
+    # Wait until the rendered conversation actually changes.
+    for _ in range(20):
+        time.sleep(0.25)
+        after_text = container.inner_text()
+
+        if after_text != before_text:
+            break
+
+    after_height = container.evaluate(
+        "el => el.scrollHeight"
+    )
+'''
+)
+
+p.write_text(s)
+
+print("✓ Patched test to wait for actual conversation change")
+PY
+
+python copy_test.py

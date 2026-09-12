@@ -1,0 +1,195 @@
+from playwright.sync_api import sync_playwright
+from pathlib import Path
+import subprocess
+import time
+
+PROFILE = "/home/msp-fsp321/chatgpt_archive/firefox_profile"
+
+CHAT_URL = (
+    "https://chatgpt.com/g/g-p-6a94243042c48191809ddc8971ec785d/"
+    "c/6a94245e-0390-83e8-81e8-f531e1d5251f"
+)
+
+OUT = Path("~/chatgpt_archive/output/copy_test").expanduser()
+OUT.mkdir(parents=True, exist_ok=True)
+
+OUTPUT = OUT / "ASSISTANT_ABOVE_USER.txt"
+
+
+def clipboard():
+    return subprocess.run(
+        ["xclip", "-selection", "clipboard", "-o"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    ).stdout
+
+
+with sync_playwright() as p:
+
+    print("=" * 70)
+    print("COPY EXACT ASSISTANT RESPONSE ABOVE USER MESSAGE")
+    print("=" * 70)
+
+    context = p.firefox.launch_persistent_context(
+        PROFILE,
+        headless=False
+    )
+
+    page = context.pages[0] if context.pages else context.new_page()
+
+    page.goto(
+        CHAT_URL,
+        wait_until="domcontentloaded",
+        timeout=120000
+    )
+
+    print("\nWaiting for ChatGPT...")
+    time.sleep(8)
+
+    container = page.locator(
+        "div.group\\/scroll-root"
+    ).first
+
+    container.wait_for(
+        state="visible",
+        timeout=60000
+    )
+
+    # Start at the newest area.
+    container.evaluate(
+        "el => el.scrollTop = el.scrollHeight"
+    )
+
+    time.sleep(3)
+
+    TARGET = "And yes: we're building the serious version."
+
+    print("\nLooking for assistant response beginning:")
+    print(TARGET)
+
+    text_match = page.get_by_text(
+        TARGET,
+        exact=False
+    )
+
+    if text_match.count() == 0:
+        raise RuntimeError(
+            "Target assistant text is not currently mounted."
+        )
+
+    print(
+        f"✓ Target text found: {text_match.count()} match(es)"
+    )
+
+    # --------------------------------------------------
+    # Find the nearest ancestor that contains a Copy button.
+    # --------------------------------------------------
+
+    target = text_match.first
+
+    copy_button = target.locator(
+        "xpath=ancestor::*[.//button[@aria-label='Copy message']][1]"
+    ).get_by_role(
+        "button",
+        name="Copy"
+    ).first
+
+    if copy_button.count() == 0:
+        print("\nCould not find Copy through ancestor relationship.")
+
+        # Diagnostic: show ancestor chain.
+        info = target.evaluate("""
+        el => {
+            const result = [];
+            let p = el;
+
+            for (let i = 0; i < 12 && p; i++, p = p.parentElement) {
+                result.push({
+                    level: i,
+                    tag: p.tagName,
+                    classes: p.className,
+                    textLength: (p.innerText || '').length,
+                    copyButtons: p.querySelectorAll(
+                        'button[aria-label="Copy message"]'
+                    ).length
+                });
+            }
+
+            return result;
+        }
+        """)
+
+        for x in info:
+            print(x)
+
+        input("\nPress ENTER to close...")
+        context.close()
+        raise SystemExit(1)
+
+    print("✓ Exact Copy button found")
+
+    # Show the ancestor's text size for verification.
+    ancestor_text = copy_button.locator(
+        "xpath=ancestor::*[.//button[@aria-label='Copy message']][1]"
+    ).inner_text()
+
+    print(
+        f"Response container text: "
+        f"{len(ancestor_text):,} characters"
+    )
+
+    print("\nClicking COPY...")
+
+    copy_button.scroll_into_view_if_needed()
+    copy_button.click(force=True)
+
+    time.sleep(0.8)
+
+    text = clipboard()
+
+    OUTPUT.write_text(
+        text,
+        encoding="utf-8"
+    )
+
+    print("\n" + "=" * 70)
+    print("RESULT")
+    print("=" * 70)
+
+    print(
+        f"Characters: {len(text):,}"
+    )
+
+    print(
+        f"Lines:      {len(text.splitlines()):,}"
+    )
+
+    print(
+        f"File:       {OUTPUT}"
+    )
+
+    expected = (
+        "And yes: we're building the serious version."
+    )
+
+    if expected.lower() in text.lower():
+        print(
+            "\n✅ CORRECT ASSISTANT RESPONSE COPIED"
+        )
+    else:
+        print(
+            "\n❌ WRONG RESPONSE COPIED"
+        )
+
+    print("\nFIRST 15 LINES:")
+    print("-" * 70)
+    print("\n".join(text.splitlines()[:15]))
+
+    print("\nLAST 10 LINES:")
+    print("-" * 70)
+    print("\n".join(text.splitlines()[-10:]))
+
+    input("\nPress ENTER to close Firefox...")
+
+    context.close()

@@ -1,0 +1,1624 @@
+SIH
+Share
+
+Now we have the answer.
+
+Backend audit: PASS
+
+The one thing I was worried about is confirmed:
+
+Knowledge provenance is intentionally persisted at two levels
+
+1. Analytical report / historical scan
+
+KnowledgeService
+      ↓
+report["knowledge_snapshot"]
+      ↓
+ScanState.knowledge_snapshot
+
+Your tests explicitly verify this chain. 
+
+Pasted text
+
+2. Individual recommendations / migration options
+
+KnowledgeService
+      ↓
+Recommendation
+ ├── knowledge_version
+ ├── knowledge_hash
+ ├── candidates
+ └── explainability
+      ↓
+MigrationOption
+ ├── knowledge_version
+ └── knowledge_hash
+
+And the provenance integration tests pass.
+
+One nuance
+
+ECDATScan itself currently does not populate its knowledge_snapshot field:
+
+Python
+Run
+return ECDATScan(
+    ...
+    verification=verification_states,
+)
+
+There is no:
+
+Python
+Run
+knowledge_snapshot=...
+
+So the architecture is currently:
+
+ECDATScan
+ ├── recommendations → knowledge provenance ✅
+ ├── migration options → knowledge provenance ✅
+ └── knowledge_snapshot → None ⚠️
+
+Report
+ └── knowledge_snapshot → persisted ✅
+
+ScanState
+ └── knowledge_snapshot → persisted from report ✅
+
+That's not a blocker for the current system because the report/history path is the persisted analytical snapshot, and your tests protect it.
+
+But architecturally, since ECDATScan already has the field, I would eventually make the canonical model self-contained too. I would not make that change right now, because we've already validated the current contract and it would create another unnecessary modification before pushing.
+
+Final backend state
+
+So, for this milestone:
+
+✅ Discovery
+✅ Canonical model
+✅ Evidence/identity
+✅ Security risk
+✅ Quantum risk
+✅ MOSCA
+✅ Business context
+✅ Risk Landscape
+✅ Knowledge registry
+✅ Knowledge lifecycle/freshness/conflicts
+✅ PQC/hybrid knowledge
+✅ Knowledge-driven recommendations
+✅ Migration relationships/options
+✅ Recommendation provenance
+✅ Scan history/diff
+✅ Verification
+✅ Reporting
+✅ API integration
+✅ Topology relationships preserved
+✅ Analysis Tools preserved
+✅ 54 backend tests passing
+✅ Frontend build passing
+✅ compileall passing
+✅ diff check passing
+
+The audit itself also confirms the Topology relationship builders, MOSCA engine, verification/history stack, and Analysis Tools routes remain present. 
+
+Pasted text
+
+Therefore: we can push this milestone.
+
+But before pushing, commit it first so we have a clean local checkpoint.
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+git add \
+  backend/analysis/recommendations.py \
+  backend/analysis/report_builder.py \
+  backend/model/canonical.py \
+  backend/model/scan_state.py \
+  backend/model/scan_state_builder.py \
+  backend/model/schema.py \
+  frontend/lib/types.ts \
+  backend/tests/test_canonical_recommendation_provenance.py \
+  backend/tests/test_knowledge_snapshot.py
+
+git diff --cached --check
+
+git commit -m "feat(ecdat): make recommendations knowledge-driven"
+
+git status --short
+git log -1 --oneline
+
+Don't push yet. Paste the commit/status output. Then we'll verify the commit itself and push.
+
+Yesterday 11:46 PM
+git add \
+  backend/analysis/recommendations.py \
+  backend/analysis/report_builder.py \
+  backend/model/canonical.py \
+  backend/model/scan_state.py \
+  backend/model/scan_state_builder.py \
+  backend/model/schema.py \
+  frontend/lib/types.ts \
+  backend/tests/test_canonical_recommendation_provenance.py \
+  backend/tests/test_knowledge_snapshot.py
+
+git diff --cached --check
+
+git commit -m "feat(ecdat): make recommendations knowledge-driven"
+
+git status --short
+git log -1 --oneline
+[feature/crypto-knowledge 44e8406] feat(ecdat): make recommendations knowledge-driven
+ 9 files changed, 457 insertions(+), 294 deletions(-)
+ create mode 100644 backend/tests/test_canonical_recommendation_provenance.py
+ create mode 100644 backend/tests/test_knowledge_snapshot.py
+44e8406 (HEAD -> feature/crypto-knowledge) feat(ecdat): make recommendations knowledge-driven
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+Show more
+
+Excellent. Commit succeeded and the working tree is clean.
+
+Current checkpoint:
+
+44e8406 feat(ecdat): make recommendations knowledge-driven
+
+So this milestone is safely captured locally.
+
+Now verify the commit, then push
+
+Run:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+printf '\n===== WORKTREE =====\n'
+git status --short
+
+printf '\n===== BRANCH =====\n'
+git branch -vv | grep '^\*'
+
+printf '\n===== COMMIT =====\n'
+git show --stat --oneline --decorate HEAD
+
+printf '\n===== REMOTE CHECK =====\n'
+git fetch origin
+
+git log --oneline --decorate -3
+
+printf '\n===== PUSH =====\n'
+git push origin feature/crypto-knowledge
+
+printf '\n===== FINAL STATUS =====\n'
+git status --short
+
+printf '\n===== FINAL HEAD =====\n'
+git log -1 --oneline --decorate
+
+Expected final state:
+
+feature/crypto-knowledge
+        ↓
+origin/feature-crypto-knowledge
+        ↓
+44e8406 feat(ecdat): make recommendations knowledge-driven
+
+Once that push succeeds, this milestone is officially done.
+
+Then we move forward — and I recommend the next backend target be dependency-aware migration intelligence, not another cosmetic feature.
+
+Pasted text.txt
+Document
+Web search
+ (base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ set -e
+
+echo "=== ECDAT PASS 3: RECOMMENDATION INTELLIGENCE ==="
+
+echo
+echo "--- CURRENT RECOMMENDATION ENGINE ---"
+sed -n '1,280p' backend/analysis/recommendations.py
+
+echo
+echo "--- RECOMMENDATION MODEL ---"
+grep -Rni \
+  -E "class Recommendation|Recommendation\\(" \
+  backend/model backend/analysis \
+  --exclude-dir=__pycache__ | head -80
+
+echo
+echo "--- KNOWLEDGE RESOLUTION ---"
+sed -n '1,320p' backend/knowledge/resolver.py
+
+echo
+echo "--- KNOWLEDGE SERVICE ---"
+sed -n '1,360p' backend/knowledge/service.py
+
+echo
+echo "--- KNOWLEDGE SCHEMA ---"
+sed -n '1,360p' backend/knowledge/schema.py
+
+echo
+echo "--- EXISTING RECOMMENDATION TESTS ---"
+sed -n '1,360p' backend/tests/test_knowledge_recommendations.py 2>/dev/null || true
+sed -n '1,360p' backend/tests/test_canonical_recommendation_provenance.py 2>/dev/null || true
+
+echo
+echo "--- GIT STATE ---"
+git status --short
+git log --oneline -5
+=== ECDAT PASS 3: RECOMMENDATION INTELLIGENCE ===
+
+--- CURRENT RECOMMENDATION ENGINE ---
+"""
+ECDAT recommendation engine.
+
+Decision logic is knowledge-driven.
+
+The engine does NOT contain algorithm-specific migration rules.
+Cryptographic relationships, lifecycle state, applicability and
+compatibility come from backend/knowledge.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from knowledge.service import KnowledgeService
+
+
+SERVICE = KnowledgeService()
+
+
+def _artifact_algorithm(artifact: Dict[str, Any]) -> str:
+    return str(
+        artifact.get("algorithm")
+        or artifact.get("algorithm_name")
+        or "UNKNOWN"
+    ).strip()
+
+
+def _artifact_purpose(
+    artifact: Dict[str, Any],
+) -> Optional[str]:
+    purpose = artifact.get("purpose")
+
+    if isinstance(purpose, dict):
+        purpose = purpose.get("value")
+
+    if purpose:
+        return str(purpose).strip().lower()
+
+    return None
+
+
+def _risk_level(
+    artifact: Dict[str, Any],
+) -> str:
+    risk = artifact.get("risk") or {}
+
+    if isinstance(risk, dict):
+        quantum = risk.get("quantum") or {}
+
+        if isinstance(quantum, dict):
+            level = quantum.get("level")
+            if level:
+                return str(level).upper()
+
+    return "UNKNOWN"
+
+
+def _priority(
+    artifact: Dict[str, Any],
+    lifecycle_status: str,
+) -> str:
+    risk = _risk_level(artifact)
+
+    if lifecycle_status in {
+        "withdrawn",
+        "deprecated",
+        "legacy",
+    }:
+        return "CRITICAL"
+
+    if risk == "CRITICAL":
+        return "CRITICAL"
+
+    if risk == "HIGH":
+        return "HIGH"
+
+    if risk == "MEDIUM":
+        return "MEDIUM"
+
+    if risk == "LOW":
+        return "LOW"
+
+    return "REVIEW"
+
+
+def _candidate_text(
+    candidate,
+    compatibility_status: Optional[str] = None,
+) -> str:
+    suffix = ""
+
+    if compatibility_status == "unsupported":
+        suffix = " Current target compatibility is unsupported."
+
+    elif compatibility_status == "conditional":
+        suffix = " Current target compatibility is conditional."
+
+    elif compatibility_status == "unknown":
+        suffix = " Target compatibility is not established."
+
+    if candidate.hybrid:
+        return (
+            f"Evaluate the hybrid migration relationship "
+            f"{candidate.source_algorithm} → {candidate.target_algorithm}."
+            f"{suffix}"
+        )
+
+    return (
+        f"Evaluate migration from "
+        f"{candidate.source_algorithm} to "
+        f"{candidate.target_algorithm}."
+        f"{suffix}"
+    )
+
+
+def get_recommendation(
+    artifact: Dict[str, Any],
+    *,
+    knowledge_service: Optional[KnowledgeService] = None,
+    as_of: Optional[str] = None,
+) -> str:
+    """
+    Return the primary explainable recommendation.
+
+    This function intentionally contains no algorithm-specific branches.
+    """
+
+    service = knowledge_service or SERVICE
+
+    algorithm = _artifact_algorithm(artifact)
+    purpose = _artifact_purpose(artifact)
+
+    result = service.resolve(
+        algorithm,
+        purpose=purpose,
+        as_of=as_of,
+    )
+
+    if result.algorithm is None:
+        return (
+            "Cryptographic knowledge resolution is unresolved for "
+            f"'{algorithm}'. Perform manual review before selecting "
+            "a migration candidate."
+        )
+
+    knowledge = result.algorithm
+
+    if knowledge.lifecycle_status in {
+        "withdrawn",
+        "deprecated",
+        "legacy",
+    }:
+        candidates = result.migrations
+
+        if candidates:
+            target_names = ", ".join(
+                sorted(
+                    {
+                        candidate.target_algorithm
+                        for candidate in candidates
+                    }
+                )
+            )
+
+            return (
+                f"{knowledge.name} has lifecycle status "
+                f"{knowledge.lifecycle_status}. "
+                f"Evaluate the knowledge-linked migration candidates: "
+                f"{target_names}."
+            )
+
+        return (
+            f"{knowledge.name} has lifecycle status "
+            f"{knowledge.lifecycle_status}. "
+            "No validated migration candidate was resolved; "
+            "perform manual review."
+        )
+
+    if knowledge.quantum_posture == "quantum_vulnerable":
+        if result.migrations:
+            candidate = result.migrations[0]
+
+            return _candidate_text(
+                candidate
+            )
+
+        return (
+            f"{knowledge.name} is classified as "
+            "quantum-vulnerable, but no applicable migration "
+            "relationship was resolved for the observed purpose."
+        )
+
+    if knowledge.quantum_posture == "quantum_dependent":
+        return (
+            f"{knowledge.name} requires parameter- and purpose-aware "
+            "quantum security assessment rather than automatic "
+            "replacement."
+        )
+
+    if knowledge.quantum_posture == "quantum_resistant":
+        return (
+            f"{knowledge.name} is currently classified as "
+            "quantum-resistant according to the active knowledge "
+            "snapshot. Continue validating implementation and "
+            "protocol compatibility."
+        )
+
+    return (
+        f"Knowledge resolution for {knowledge.name} does not establish "
+        "a deterministic migration action. Perform contextual review."
+    )
+
+
+def build_recommendation(
+    artifact: Dict[str, Any],
+    *,
+    knowledge_service: Optional[KnowledgeService] = None,
+    as_of: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Produce a structured recommendation suitable for the canonical model,
+    APIs and future UI.
+
+    The result includes the knowledge snapshot so recommendations can
+    later be reproduced and invalidated when knowledge changes.
+    """
+
+    service = knowledge_service or SERVICE
+
+    algorithm = _artifact_algorithm(artifact)
+    purpose = _artifact_purpose(artifact)
+
+    resolution = service.resolve(
+        algorithm,
+        purpose=purpose,
+        as_of=as_of,
+    )
+
+    if resolution.algorithm is None:
+        return {
+            "status": "UNRESOLVED",
+            "algorithm": algorithm,
+            "purpose": purpose,
+            "priority": "REVIEW",
+            "text": get_recommendation(
+                artifact,
+                knowledge_service=service,
+                as_of=as_of,
+            ),
+            "rationale": (
+                "No canonical knowledge record matched the observed "
+                "cryptographic artifact."
+            ),
+            "knowledge_version": service.version,
+            "knowledge_hash": service.integrity_hash,
+            "matched_by": None,
+            "candidate_count": 0,
+            "candidate_ids": [],
+            "conflict_count": 0,
+        }
+
+    knowledge = resolution.algorithm
+
+    priority = _priority(
+        artifact,
+        knowledge.lifecycle_status,
+    )
+
+    candidates = list(
+        resolution.migrations
+    )
+
+    compatibility_states = [
+        item.status
+        for item in resolution.compatibility
+    ]
+
+    if "unsupported" in compatibility_states:
+        compatibility_state = "unsupported"
+
+--- RECOMMENDATION MODEL ---
+backend/model/schema.py:92:class Recommendation:
+backend/model/canonical.py:390:def build_recommendation(
+backend/model/canonical.py:400:    result = build_knowledge_recommendation(artifact)
+backend/model/canonical.py:402:    return Recommendation(
+backend/model/canonical.py:1005:            build_recommendation(
+backend/analysis/recommendations.py:117:def get_recommendation(
+backend/analysis/recommendations.py:215:def build_recommendation(
+backend/analysis/recommendations.py:246:            "text": get_recommendation(
+backend/analysis/recommendations.py:309:        "text": get_recommendation(
+
+--- KNOWLEDGE RESOLUTION ---
+from __future__ import annotations
+
+from typing import Optional
+
+from knowledge.compatibility import applicable_constraints
+from knowledge.migration import candidate_migrations
+from knowledge.schema import KnowledgeRegistry, KnowledgeResolution
+from knowledge.temporal import is_effective
+
+
+def _normalize(value: str) -> str:
+    return (
+        value
+        .strip()
+        .upper()
+        .replace("_", "-")
+        .replace(" ", "-")
+    )
+
+
+def resolve_algorithm(
+    registry: KnowledgeRegistry,
+    query: str,
+    purpose: Optional[str] = None,
+    as_of: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_name: Optional[str] = None,
+    target_version: Optional[str] = None,
+) -> KnowledgeResolution:
+    normalized = _normalize(query)
+
+    exact = None
+    matched_by = None
+
+    for algorithm in registry.algorithms:
+        candidates = {
+            _normalize(algorithm.name),
+            *{
+                _normalize(alias)
+                for alias in algorithm.aliases
+            },
+        }
+
+        if normalized in candidates:
+            exact = algorithm
+            matched_by = (
+                "canonical_name"
+                if normalized == _normalize(algorithm.name)
+                else "alias"
+            )
+            break
+
+    if exact is None:
+        return KnowledgeResolution(
+            query=query,
+            normalized_query=normalized,
+            algorithm=None,
+            matched_by=None,
+            standards=(),
+            compatibility=(),
+            migrations=(),
+            conflicts=(),
+            current=False,
+            knowledge_version=registry.manifest.knowledge_version,
+            explainability={
+                "status": "unresolved",
+                "reason": "No canonical name or alias matched.",
+            },
+        )
+
+    current = is_effective(
+        exact.effective_from,
+        exact.effective_until,
+        as_of,
+    )
+
+    standards = tuple(
+        standard
+        for standard in registry.standards
+        if exact.name in standard.related_algorithms
+        and is_effective(
+            standard.effective_from,
+            standard.effective_until,
+            as_of,
+        )
+    )
+
+    compatibility = tuple(
+        item
+        for item in applicable_constraints(
+            registry.compatibility,
+            target_type=target_type,
+            target_name=target_name,
+            version=target_version,
+        )
+        if _normalize(item.algorithm) == normalized
+        and is_effective(
+            item.effective_from,
+            item.effective_until,
+            as_of,
+        )
+    )
+
+    migrations = tuple(
+        item
+        for item in candidate_migrations(
+            registry.migrations,
+            exact.name,
+            purpose=purpose,
+        )
+        if is_effective(
+            item.effective_from,
+            item.effective_until,
+            as_of,
+        )
+    )
+
+    conflicts = tuple(
+        conflict
+        for conflict in registry.conflicts
+        if conflict.subject_id.upper() == exact.name.upper()
+    )
+
+    return KnowledgeResolution(
+        query=query,
+        normalized_query=normalized,
+        algorithm=exact,
+        matched_by=matched_by,
+        standards=standards,
+        compatibility=compatibility,
+        migrations=migrations,
+        conflicts=conflicts,
+        current=current,
+        knowledge_version=registry.manifest.knowledge_version,
+        explainability={
+            "matched_by": matched_by,
+            "algorithm": exact.name,
+            "purpose_filter": purpose,
+            "as_of": as_of,
+            "standards_found": len(standards),
+            "compatibility_records_found": len(compatibility),
+            "migration_candidates_found": len(migrations),
+            "conflicts_found": len(conflicts),
+        },
+    )
+
+--- KNOWLEDGE SERVICE ---
+from __future__ import annotations
+
+from typing import Optional
+
+from knowledge.freshness import (
+    registry_freshness,
+)
+from knowledge.registry import get_registry
+from knowledge.resolver import resolve_algorithm
+from knowledge.schema import (
+    KnowledgeRegistry,
+    KnowledgeResolution,
+)
+from knowledge.temporal import (
+    snapshot_state,
+)
+
+
+class KnowledgeService:
+    """
+    Stable application-facing boundary for ECDAT knowledge.
+
+    Consumers should not depend on registry implementation details.
+    """
+
+    def __init__(
+        self,
+        registry: Optional[KnowledgeRegistry] = None,
+    ):
+        self.registry = (
+            registry or get_registry()
+        )
+
+    @property
+    def version(self) -> str:
+        return (
+            self.registry.manifest
+            .knowledge_version
+        )
+
+    @property
+    def integrity_hash(self) -> str:
+        return (
+            self.registry.manifest
+            .registry_hash
+        )
+
+    def snapshot(self) -> dict:
+        return {
+            "knowledge_version": self.version,
+            "knowledge_hash": self.integrity_hash,
+            "generated_at": (
+                self.registry.manifest
+                .generated_at
+            ),
+        }
+
+    def freshness(
+        self,
+        *,
+        max_age_days: int = 180,
+        as_of: Optional[str] = None,
+    ) -> dict:
+        return registry_freshness(
+            self.registry.provenance,
+            max_age_days=max_age_days,
+            as_of=as_of,
+        )
+
+    def snapshot_state(
+        self,
+        knowledge_version: Optional[str],
+        knowledge_hash: Optional[str],
+    ) -> str:
+        return snapshot_state(
+            snapshot_version=knowledge_version,
+            snapshot_hash=knowledge_hash,
+            current_version=self.version,
+            current_hash=self.integrity_hash,
+        )
+
+    def resolve(
+        self,
+        query: str,
+        purpose: Optional[str] = None,
+        as_of: Optional[str] = None,
+        target_type: Optional[str] = None,
+        target_name: Optional[str] = None,
+        target_version: Optional[str] = None,
+    ) -> KnowledgeResolution:
+        return resolve_algorithm(
+            registry=self.registry,
+            query=query,
+            purpose=purpose,
+            as_of=as_of,
+            target_type=target_type,
+            target_name=target_name,
+            target_version=target_version,
+        )
+
+    def algorithms(self):
+        return self.registry.algorithms
+
+    def standards(self):
+        return self.registry.standards
+
+    def migrations(self):
+        return self.registry.migrations
+
+    def protocols(self):
+        return self.registry.protocols
+
+    def compatibility(self):
+        return self.registry.compatibility
+
+    def conflicts(self):
+        return self.registry.conflicts
+
+--- KNOWLEDGE SCHEMA ---
+"""
+ECDAT v0.5 Cryptographic Knowledge Domain.
+
+The knowledge layer is intentionally data-driven:
+cryptographic facts live in versioned records, while the engines
+interpret those records deterministically.
+
+No recommendation logic belongs in this module.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
+
+SCHEMA_VERSION = "1.0.0"
+
+VALID_PRIMITIVES = {
+    "signature",
+    "kem",
+    "key_exchange",
+    "encryption",
+    "hash",
+    "mac",
+    "protocol",
+    "key_derivation",
+    "composite",
+    "unknown",
+}
+
+VALID_LIFECYCLE_STATUSES = {
+    "standardized",
+    "approved",
+    "active",
+    "deprecated",
+    "legacy",
+    "withdrawn",
+    "candidate",
+    "draft",
+    "unknown",
+}
+
+VALID_QUANTUM_POSTURES = {
+    "quantum_resistant",
+    "quantum_vulnerable",
+    "quantum_dependent",
+    "not_applicable",
+    "unknown",
+}
+
+VALID_CONFIDENCE = {
+    "high",
+    "medium",
+    "low",
+    "unknown",
+}
+
+VALID_RELATIONSHIP_TYPES = {
+    "replaces",
+    "alternative_to",
+    "hybrid_with",
+    "compatible_with",
+    "requires",
+    "supersedes",
+    "related_to",
+}
+
+VALID_COMPATIBILITY_STATUS = {
+    "supported",
+    "conditional",
+    "unsupported",
+    "unknown",
+}
+
+VALID_TARGET_TYPES = {
+    "library",
+    "provider",
+    "implementation",
+    "protocol",
+    "runtime",
+    "platform",
+    "service",
+    "unknown",
+}
+
+VALID_PROTOCOL_STATUSES = {
+    "supported",
+    "conditional",
+    "unsupported",
+    "unknown",
+}
+
+VALID_SOURCE_TYPES = {
+    "standard",
+    "specification",
+    "official_documentation",
+    "research",
+    "vendor",
+    "secondary",
+    "unknown",
+}
+
+
+@dataclass(frozen=True)
+class KnowledgeProvenance:
+    source_id: str
+    source_type: str
+    authority: str
+    authority_rank: int
+    title: str
+    uri: str
+    published_at: Optional[str] = None
+    retrieved_at: Optional[str] = None
+    effective_from: Optional[str] = None
+    effective_until: Optional[str] = None
+    evidence_hash: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SecurityStrength:
+    classical_bits: Optional[int] = None
+    quantum_bits: Optional[int] = None
+    basis: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class AlgorithmKnowledge:
+    knowledge_id: str
+    name: str
+    aliases: Tuple[str, ...]
+    family: str
+    primitive: str
+    purposes: Tuple[str, ...]
+    lifecycle_status: str
+    quantum_posture: str
+    security_strength: SecurityStrength
+    key_sizes: Tuple[int, ...]
+    parameters: Tuple[str, ...]
+    components: Tuple[str, ...]
+    standards: Tuple[str, ...]
+    description: str
+    notes: str
+    effective_from: Optional[str]
+    effective_until: Optional[str]
+    source_ids: Tuple[str, ...]
+    confidence: str
+    record_version: int = 1
+
+
+@dataclass(frozen=True)
+class StandardKnowledge:
+    standard_id: str
+    authority: str
+    identifier: str
+    title: str
+    status: str
+    published_at: Optional[str]
+    effective_from: Optional[str]
+    effective_until: Optional[str]
+    related_algorithms: Tuple[str, ...]
+    supersedes: Tuple[str, ...]
+    source_ids: Tuple[str, ...]
+    confidence: str
+    record_version: int = 1
+
+
+@dataclass(frozen=True)
+class CompatibilityConstraint:
+    compatibility_id: str
+    algorithm: str
+    target_type: str
+    target_name: str
+    version_min: Optional[str]
+    version_max: Optional[str]
+    status: str
+    constraints: Tuple[str, ...]
+    source_ids: Tuple[str, ...]
+    effective_from: Optional[str]
+    effective_until: Optional[str]
+    confidence: str
+    interoperability: Tuple[str, ...] = ()
+    record_version: int = 1
+
+
+@dataclass(frozen=True)
+class ProtocolApplicability:
+    applicability_id: str
+    algorithm: str
+    protocol: str
+    protocol_version: Optional[str]
+    usage: str
+    status: str
+    recommended: Optional[bool]
+    dtls_ok: Optional[bool]
+    constraints: Tuple[str, ...]
+    source_ids: Tuple[str, ...]
+    effective_from: Optional[str]
+    effective_until: Optional[str]
+    confidence: str
+    record_version: int = 1
+
+
+@dataclass(frozen=True)
+class MigrationRelationship:
+    relationship_id: str
+    source_algorithm: str
+    target_algorithm: str
+    relationship_type: str
+    applicable_purposes: Tuple[str, ...]
+    hybrid: bool
+    prerequisites: Tuple[str, ...]
+    constraints: Tuple[str, ...]
+    source_ids: Tuple[str, ...]
+    effective_from: Optional[str]
+    effective_until: Optional[str]
+    confidence: str
+    record_version: int = 1
+
+
+@dataclass(frozen=True)
+class KnowledgeConflict:
+    conflict_id: str
+    subject_type: str
+    subject_id: str
+    field: str
+    values: Tuple[str, ...]
+    source_ids: Tuple[str, ...]
+    resolution: str
+    severity: str
+
+
+@dataclass(frozen=True)
+class KnowledgeManifest:
+    schema_version: str
+    knowledge_version: str
+    generated_at: str
+    registry_hash: str
+    source_count: int
+    algorithm_count: int
+    standard_count: int
+    compatibility_count: int
+    migration_count: int
+    conflict_count: int = 0
+
+
+@dataclass(frozen=True)
+class KnowledgeRegistry:
+    manifest: KnowledgeManifest
+    algorithms: Tuple[AlgorithmKnowledge, ...] = field(default_factory=tuple)
+    standards: Tuple[StandardKnowledge, ...] = field(default_factory=tuple)
+    compatibility: Tuple[CompatibilityConstraint, ...] = field(default_factory=tuple)
+    protocols: Tuple[ProtocolApplicability, ...] = field(default_factory=tuple)
+    migrations: Tuple[MigrationRelationship, ...] = field(default_factory=tuple)
+    provenance: Tuple[KnowledgeProvenance, ...] = field(default_factory=tuple)
+    conflicts: Tuple[KnowledgeConflict, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class KnowledgeResolution:
+    query: str
+    normalized_query: str
+    algorithm: Optional[AlgorithmKnowledge]
+    matched_by: Optional[str]
+    standards: Tuple[StandardKnowledge, ...]
+    compatibility: Tuple[CompatibilityConstraint, ...]
+    migrations: Tuple[MigrationRelationship, ...]
+    conflicts: Tuple[KnowledgeConflict, ...]
+    current: bool
+    knowledge_version: str
+    explainability: Dict[str, Any]
+
+
+def dataclass_to_dict(value: Any) -> Any:
+    if hasattr(value, "__dataclass_fields__"):
+        return {
+            key: dataclass_to_dict(item)
+            for key, item in asdict(value).items()
+        }
+    if isinstance(value, tuple):
+        return [dataclass_to_dict(item) for item in value]
+    if isinstance(value, list):
+        return [dataclass_to_dict(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: dataclass_to_dict(item)
+            for key, item in value.items()
+        }
+    return value
+
+--- EXISTING RECOMMENDATION TESTS ---
+import sys
+from pathlib import Path
+
+sys.path.insert(
+    0,
+    str(Path(__file__).resolve().parents[1]),
+)
+
+from analysis.recommendations import (
+    build_recommendation,
+    get_migration_candidates,
+    get_recommendation,
+)
+
+
+def test_rsa_signature_is_knowledge_driven():
+    artifact = {
+        "algorithm": "RSA",
+        "purpose": "digital_signature",
+        "risk": {
+            "quantum": {
+                "level": "HIGH"
+            }
+        },
+    }
+
+    result = build_recommendation(artifact)
+
+    assert result["status"] == "RESOLVED"
+    assert result["algorithm"] == "RSA"
+    assert "ML-DSA" in {
+        item["target_algorithm"]
+        for item in result["candidates"]
+    }
+
+    assert result["knowledge_version"] == "0.5.0"
+    assert result["knowledge_hash"]
+
+
+def test_rsa_key_establishment_is_different():
+    artifact = {
+        "algorithm": "RSA",
+        "purpose": "key_establishment",
+        "risk": {
+            "quantum": {
+                "level": "HIGH"
+            }
+        },
+    }
+
+    result = build_recommendation(artifact)
+
+    targets = {
+        item["target_algorithm"]
+        for item in result["candidates"]
+    }
+
+    assert "ML-KEM" in targets
+    assert "ML-DSA" not in targets
+
+
+def test_unknown_algorithm_does_not_invent_recommendation():
+    artifact = {
+        "algorithm": "FUTURE-CRYPTO-999",
+        "purpose": "digital_signature",
+    }
+
+    result = build_recommendation(artifact)
+
+    assert result["status"] == "UNRESOLVED"
+    assert result["candidate_count"] == 0
+    assert "manual review" in result["text"].lower()
+
+
+def test_candidates_are_knowledge_records():
+    artifact = {
+        "algorithm": "ECDH",
+        "purpose": "key_establishment",
+    }
+
+    candidates = get_migration_candidates(
+        artifact
+    )
+
+    assert candidates
+
+    for candidate in candidates:
+        assert candidate["relationship_id"]
+        assert candidate["target_algorithm"]
+        assert candidate["confidence"]
+
+
+def test_public_function_has_no_algorithm_specific_lookup_table():
+    import inspect
+    from analysis import recommendations
+
+    source = inspect.getsource(
+        recommendations.get_recommendation
+    )
+
+    forbidden = [
+        'algorithm == "RSA"',
+        'algorithm == "ECDSA"',
+        'algorithm == "AES"',
+        'algorithm == "SHA-1"',
+        'algorithm == "MD5"',
+        'algorithm == "DES"',
+    ]
+
+    for pattern in forbidden:
+        assert pattern not in source
+
+
+def test_recommendation_snapshot_is_current():
+    from analysis.recommendations import (
+        recommendation_freshness,
+    )
+
+    artifact = {
+        "algorithm": "RSA",
+        "purpose": "digital_signature",
+        "risk": {
+            "quantum": {
+                "level": "HIGH"
+            }
+        },
+    }
+
+    recommendation = build_recommendation(
+        artifact
+    )
+
+    state = recommendation_freshness(
+        recommendation
+    )
+
+    assert state["state"] == "VALID"
+    assert state["reanalysis_required"] is False
+
+
+def test_old_recommendation_becomes_stale():
+    from analysis.recommendations import (
+        recommendation_freshness,
+    )
+
+    recommendation = {
+        "knowledge_version": "0.4.0",
+        "knowledge_hash": "0" * 64,
+    }
+
+    state = recommendation_freshness(
+        recommendation
+    )
+
+    assert state["state"] == "STALE"
+    assert state["reanalysis_required"] is True
+from analysis.report_builder import build_report
+from model.canonical import build_canonical_scan
+from knowledge.service import KnowledgeService
+
+
+def _artifact():
+    return {
+        "artifact_id": "artifact:test-provenance",
+        "algorithm": "RSA",
+        "type": "cryptographic_artifact",
+        "purpose": "signature",
+        "risk": {
+            "quantum": {
+                "level": "HIGH",
+            }
+        },
+        "details": {},
+    }
+
+
+def test_canonical_recommendation_preserves_knowledge_provenance():
+    service = KnowledgeService()
+
+    artifact = _artifact()
+
+    result = build_canonical_scan(
+        {
+            "target": "provenance-test",
+            "total_files_scanned": 1,
+            "artifacts": [artifact],
+            "risk_summary": {},
+            "quantum_vulnerable_assets": 1,
+        }
+    )
+
+    assert result.recommendations
+
+    recommendation = result.recommendations[0]
+
+    assert recommendation.knowledge_version == service.version
+    assert recommendation.knowledge_hash == service.integrity_hash
+    assert recommendation.status in {
+        "RESOLVED",
+        "CONFLICT",
+        "UNRESOLVED",
+    }
+
+    assert isinstance(recommendation.candidate_ids, list)
+    assert isinstance(recommendation.candidates, list)
+
+    if recommendation.candidates:
+        candidate = recommendation.candidates[0]
+
+        assert candidate["relationship_id"]
+        assert candidate["target_algorithm"]
+        assert "relationship_type" in candidate
+        assert "hybrid" in candidate
+
+
+def test_report_preserves_recommendation_and_migration_provenance():
+    service = KnowledgeService()
+
+    report = build_report(
+        {
+            "target": "provenance-test",
+            "total_files_scanned": 1,
+            "artifacts": [_artifact()],
+            "risk_summary": {},
+            "quantum_vulnerable_assets": 1,
+        }
+    )
+
+    assert report["knowledge_snapshot"]["knowledge_version"] == service.version
+    assert report["knowledge_snapshot"]["knowledge_hash"] == service.integrity_hash
+
+    recommendations = report["recommendations"]
+    assert recommendations
+
+    recommendation = recommendations[0]
+
+    assert recommendation["knowledge_version"] == service.version
+    assert recommendation["knowledge_hash"] == service.integrity_hash
+    assert "candidate_ids" in recommendation
+    assert "candidates" in recommendation
+    assert "explainability" in recommendation
+
+    for option in report["migration_options"]:
+        assert option["knowledge_version"] == service.version
+        assert option["knowledge_hash"] == service.integrity_hash
+        assert option["relationship_id"]
+        assert option["target_algorithm"]
+
+--- GIT STATE ---
+ M backend/knowledge/compatibility.py
+ M backend/knowledge/data/registry.json
+ M backend/knowledge/provenance.py
+ M backend/knowledge/registry.py
+ M backend/knowledge/schema.py
+ M backend/knowledge/service.py
+44e8406 (HEAD -> feature/crypto-knowledge, origin/feature/crypto-knowledge) feat(ecdat): make recommendations knowledge-driven
+f3e3fd0 feat(ecdat): model hybrid cryptographic mechanisms
+4996e73 feat(ecdat): expose versioned cryptographic knowledge API
+3d1c45b feat(ecdat): add data-driven cryptographic knowledge engine
+1a890ec (origin/main, main) feat(ecdat): establish temporal verification foundation
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+
+Show more
+
+Good. We have enough to see the shape, and the web check confirms the direction: RFC 10024 is now Standards Track and defines exactly three TLS 1.3 PQ/T hybrids; X25519MLKEM768 is marked Recommended=Y, while the P-256/P-384 hybrids are Recommended=N. 
+RFC Editor
++1
+
+One important correction before we touch code: we should not blindly replace recommendations.py yet. Your output cut off at line 309, which is exactly where the existing candidate/freshness machinery lives. Replacing it now would be me guessing at production code. Bad engineering.
+
+Pass 3A — expose the remaining interfaces
+
+Run this single batch:
+
+Bash
+set -e
+
+cd ~/ECDAT/ECDAT1
+
+echo "=== PASS 3A: EXACT INTEGRATION SURFACE ==="
+
+echo
+echo "--- RECOMMENDATIONS 280-END ---"
+sed -n '280,520p' backend/analysis/recommendations.py
+
+echo
+echo "--- CANONICAL RECOMMENDATION MODEL ---"
+sed -n '70,125p' backend/model/schema.py
+sed -n '370,430p' backend/model/canonical.py
+
+echo
+echo "--- MIGRATION KNOWLEDGE ---"
+sed -n '1,300p' backend/knowledge/migration.py
+
+echo
+echo "--- COMPATIBILITY KNOWLEDGE ---"
+sed -n '1,320p' backend/knowledge/compatibility.py
+
+echo
+echo "--- PROTOCOL KNOWLEDGE ---"
+grep -Rni \
+  -E "protocol|ProtocolApplicability|protocols" \
+  backend/knowledge backend/api backend/tests \
+  --exclude-dir=__pycache__ | head -180
+
+echo
+echo "--- REGISTRY MANIFEST / LOADING ---"
+grep -n -A80 -B20 \
+  "KnowledgeManifest\\|KnowledgeRegistry\\|protocols" \
+  backend/knowledge/registry.py
+
+echo
+echo "--- CURRENT KNOWLEDGE DATA COUNTS ---"
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python - <<'PY'
+from knowledge.service import KnowledgeService
+
+s = KnowledgeService()
+
+print("version:", s.version)
+print("hash:", s.integrity_hash)
+print("algorithms:", len(s.algorithms()))
+print("standards:", len(s.standards()))
+print("migrations:", len(s.migrations()))
+print("compatibility:", len(s.compatibility()))
+print("protocols:", len(s.protocols()))
+print("conflicts:", len(s.conflicts()))
+
+for p in s.protocols():
+    print(
+        "PROTOCOL",
+        p.algorithm,
+        p.protocol,
+        p.protocol_version,
+        p.usage,
+        p.status,
+        "recommended=", p.recommended,
+        "dtls_ok=", p.dtls_ok,
+    )
+PY
+
+echo
+echo "--- STATUS ---"
+git status --short
+
+Paste that output.
+
+Then we're going straight into Pass 3B: scored candidates + protocol-aware recommendation reasoning + stale recommendation invalidation, with tests in the same batch.
+
+And we're keeping one principle non-negotiable: ECDAT must explain why candidate A beat candidate B. A recommendation score without evidence is just a prettier lookup table.
+
+Pasted text.txt
+Document
+Web search
+ 
+
+Yes. I reviewed the uploaded output and checked the current NIST position as well. Your regression is clean: 54 backend tests + frontend production build pass, and the uploaded diff shows the recommendation/canonical layers have already been successfully moved away from the old algorithm-specific branching. 
+
+Pasted text
+
+The external research also changes one thing we should account for now: NIST's 2026 material says ML-KEM, ML-DSA and SLH-DSA are the foundation for most deployments, while HQC is an additional standardized candidate and FALCON is still progressing toward another standard. 
+NIST Computer Security Resource Center
++1
+
+So don't add arbitrary candidates just to make the UI look clever. Candidate scoring needs to distinguish standardized, selected/ongoing, hybrid, and merely known mechanisms.
+
+Pass 3 direction
+
+Your current architecture is ready for this:
+
+Artifact
+   ↓
+Knowledge Resolution
+   ↓
+Migration Relationships
+   ↓
+Compatibility
+   ↓
+Protocol Applicability
+   ↓
+Standards / Lifecycle / Quantum posture
+   ↓
+Candidate Scoring
+   ↓
+Evidence-backed explanation
+   ↓
+Recommendation
+   ↓
+Knowledge snapshot
+
+The key output becomes:
+
+JSON
+{
+  "target_algorithm": "X25519MLKEM768",
+  "score": 94,
+  "decision": "preferred",
+  "reasons": [
+    "hybrid migration relationship",
+    "TLS 1.3 applicable",
+    "protocol marked recommended",
+    "quantum-resistant target",
+    "high-confidence knowledge"
+  ],
+  "constraints": [],
+  "knowledge_version": "0.5.0",
+  "knowledge_hash": "..."
+}
+
+And a weaker candidate isn't simply hidden. It gets an explicit penalty:
+
+JSON
+{
+  "target_algorithm": "SecP256r1MLKEM768",
+  "score": 78,
+  "decision": "alternative",
+  "reasons": [
+    "TLS 1.3 applicable",
+    "hybrid migration relationship"
+  ],
+  "penalties": [
+    "protocol recommendation flag is negative"
+  ]
+}
+
+That's much more defensible than “ECDH → ML-KEM because I said so.”
+
+One thing I want fixed before scoring
+
+Your uploaded diff shows canonical.py was substantially rewritten — 507 lines changed — while the tests still pass. 
+
+Pasted text
+
+ That's fine, but we're not going to pile another huge rewrite on top of it.
+
+Run only this now:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+echo "===== PASS 3 — CURRENT CANDIDATE OUTPUT ====="
+
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python - <<'PY'
+from analysis.recommendations import build_recommendation
+from knowledge.service import KnowledgeService
+
+service = KnowledgeService()
+
+print("KNOWLEDGE", service.version)
+print("HASH", service.integrity_hash)
+
+for algorithm, purpose in [
+    ("RSA", "digital_signature"),
+    ("RSA", "key_establishment"),
+    ("ECDH", "key_establishment"),
+    ("ECDSA", "digital_signature"),
+]:
+    print("\n===", algorithm, purpose, "===")
+
+    result = build_recommendation({
+        "algorithm": algorithm,
+        "purpose": purpose,
+        "risk": {"quantum": {"level": "HIGH"}},
+    })
+
+    print("status:", result.get("status"))
+    print("category:", result.get("category"))
+    print("priority:", result.get("priority"))
+    print("explainability:", result.get("explainability"))
+
+    for candidate in result.get("candidates", []):
+        print(
+            candidate.get("relationship_id"),
+            "=>",
+            candidate.get("target_algorithm"),
+            "| type=",
+            candidate.get("relationship_type"),
+            "| hybrid=",
+            candidate.get("hybrid"),
+            "| confidence=",
+            candidate.get("confidence"),
+        )
+
+print("\n=== PROTOCOL RECORDS ===")
+for protocol in service.protocols():
+    print(
+        protocol.algorithm,
+        "|",
+        protocol.protocol,
+        protocol.protocol_version,
+        "| usage=",
+        protocol.usage,
+        "| status=",
+        protocol.status,
+        "| recommended=",
+        protocol.recommended,
+        "| dtls_ok=",
+        protocol.dtls_ok,
+    )
+PY
+
+Paste that output.
+
+Then I can make the scoring engine against the actual candidate structures, not a hallucinated version of your code.
+
+And yes: we're building the serious version. NIST's current guidance explicitly pushes organizations toward migration now and emphasizes identifying vulnerable algorithms and planning replacement/update, which is exactly where ECDAT's discovery → prioritization → recommendation pipeline needs to become differentiated. 
+NIST Computer Security Resource Center
+
+Sources
+Today 10:53 AM
+Web search
+ Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ModuleNotFoundError: No module named 'analysis'
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ ^C
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+
+ChatGPT can make mistakes. Check important info.
+
+﻿
+Web search
+ 
+
+Think

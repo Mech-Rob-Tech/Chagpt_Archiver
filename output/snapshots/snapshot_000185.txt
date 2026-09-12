@@ -1,0 +1,937 @@
+SIH
+Share
+Yesterday 11:07 PM
+Pasted text.txt
+Document
+Web search
+ wht bro errors 
+Worked for 35s
+
+Yes. You were right to stop me. I checked the actual GitHub branch before giving another command.
+
+The problem is now crystal clear:
+
+build_canonical_artifact_id() does not belong in identity.py.
+
+It is a helper defined in canonical.py that internally calls build_artifact_id(). GitHub's branch confirms that exact architecture.
+
+identity.py only exposes build_artifact_id, build_application_id, build_evidence_id, etc.; there is no build_canonical_artifact_id.
+
+My previous repair incorrectly imported it from identity.py. That's my mistake.
+
+So do not make any more changes based on my previous commands.
+
+Correct repair
+
+We need to restore the helper inside canonical.py, exactly where it belongs.
+
+Run only this:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+python - <<'PY'
+from pathlib import Path
+
+p = Path("backend/model/canonical.py")
+s = p.read_text()
+
+# Remove the incorrect identity import.
+s = s.replace(
+"""from model.identity import (
+    build_application_id,
+    build_artifact_id,
+    build_canonical_artifact_id,
+    build_evidence_id,
+    build_scan_id,
+    build_verification_id,
+)""",
+"""from model.identity import (
+    build_artifact_id,
+    build_evidence_id,
+)"""
+)
+
+# If the canonical helper was removed by the refactor, restore it.
+if "def build_canonical_artifact_id(" not in s:
+    marker = "\ndef build_canonical_artifact(\n"
+
+    helper = '''
+def build_canonical_artifact_id(
+    artifact: Dict[str, Any],
+    application_id: str,
+) -> str:
+    """
+    Build stable logical identity for a cryptographic artifact.
+
+    Source file, line number, scan timestamp, and scanner
+    discovery order are deliberately excluded.
+
+    Multiple indistinguishable source observations represent
+    one logical artifact and are modeled through evidence.
+    """
+    algorithm = str(
+        artifact.get(
+            "algorithm",
+            "UNKNOWN",
+        )
+    )
+
+    artifact_type = str(
+        artifact.get(
+            "type",
+            "cryptographic_artifact",
+        )
+    )
+
+    purpose = str(
+        artifact.get(
+            "purpose",
+            "unknown",
+        )
+    )
+
+    details = dict(
+        artifact.get(
+            "details",
+            {},
+        )
+    )
+
+    for key in (
+        "key_size",
+        "mode",
+        "curve",
+        "version",
+        "algorithm_family",
+    ):
+        value = artifact.get(key)
+
+        if value is not None:
+            details[key] = value
+
+    semantic_signature = artifact.get(
+        "semantic_signature"
+    )
+
+    return build_artifact_id(
+        application_id=application_id,
+        algorithm=algorithm,
+        artifact_type=artifact_type,
+        purpose=purpose,
+        details=details,
+        semantic_signature=semantic_signature,
+    )
+
+'''
+
+    if marker not in s:
+        raise RuntimeError(
+            "Could not locate build_canonical_artifact(). "
+            "Refusing to modify the file."
+        )
+
+    s = s.replace(marker, "\n" + helper + marker, 1)
+
+p.write_text(s)
+PY
+
+echo "=== VERIFY ==="
+grep -n -A8 "def build_canonical_artifact_id" backend/model/canonical.py
+
+echo
+echo "=== COMPILE ==="
+python -m compileall -q backend
+
+echo
+echo "=== PIPELINE SMOKE TEST ==="
+python - <<'PY'
+import sys
+sys.path.insert(0, "backend")
+
+from scanner.crypto_scanner import scan_repository
+from model.canonical import build_canonical_scan
+
+result = scan_repository("backend/demo_repo")
+scan = build_canonical_scan(result)
+
+print("Artifacts:", len(scan.artifacts))
+print("Applications:", len(scan.applications))
+print("Recommendations:", len(scan.recommendations))
+print("Migration options:", len(scan.migration_options))
+print("PASS: canonical pipeline assembled")
+PY
+
+echo
+echo "=== FULL TESTS ==="
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q backend/tests
+
+echo
+echo "=== DIFF CHECK ==="
+git diff --check
+
+echo
+echo "=== STATUS ==="
+git status --short
+And one important correction
+
+The GitHub version of canonical.py confirms that the helper was originally part of canonical assembly, while identity.py provides the underlying stable ID primitive.
+
+So the intended architecture is:
+
+canonical.py
+    │
+    └── build_canonical_artifact_id()
+             │
+             └── identity.py
+                    └── build_artifact_id()
+
+Not:
+
+canonical.py
+    └── import build_canonical_artifact_id
+             ↑
+        identity.py   ❌
+
+That distinction matters. We are fixing the refactor, not rewriting your identity architecture.
+
+And yes: from this point forward, I will check the actual repository implementation before prescribing another structural edit.
+
+Web search === VERIFY ===
+530:def build_canonical_artifact_id(
+531-    artifact: Dict[str, Any],
+532-    application_id: str,
+533-) -> str:
+534-    """
+535-    Build stable logical identity for a cryptographic artifact.
+536-
+537-    Source file, line number, scan timestamp, and scanner
+538-    discovery order are deliberately excluded.
+
+=== COMPILE ===
+
+=== PIPELINE SMOKE TEST ===
+Traceback (most recent call last):
+  File "<stdin>", line 8, in <module>
+  File "/home/msp-fsp321/ECDAT/ECDAT1/backend/model/canonical.py", line 689, in build_canonical_scan
+    application = Application(
+                  ^^^^^^^^^^^
+NameError: name 'Application' is not defined
+
+=== FULL TESTS ===
+...........................................FF..                                    [100%]
+======================================== FAILURES ========================================
+________________________ test_report_contains_knowledge_snapshot _________________________
+
+    def test_report_contains_knowledge_snapshot():
+>       report = build_report(
+            {
+                "artifacts": [],
+                "applications": [],
+                "evidence": [],
+            }
+        )
+
+backend/tests/test_knowledge_snapshot.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+backend/analysis/report_builder.py:32: in build_report
+    canonical_scan = build_canonical_scan(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scan_results = {'artifacts': [], 'applications': [], 'evidence': []}, mosca_inputs = None
+business_context = None
+
+    def build_canonical_scan(
+        scan_results: Dict[str, Any],
+        mosca_inputs: Optional[Dict[str, Any]] = None,
+        business_context: Optional[Dict[str, Any]] = None,
+    ) -> ECDATScan:
+        """
+        Convert the existing scanner output into the canonical ECDAT model.
+        """
+        generated_at = datetime.now(
+            timezone.utc
+        ).isoformat()
+    
+        target = str(
+            scan_results.get(
+                "target",
+                "",
+            )
+        )
+    
+>       application = Application(
+                      ^^^^^^^^^^^
+            application_id=stable_id(
+                "application",
+                target.rstrip("/").split("/")[-1]
+                or "repository",
+            ),
+            name=(
+                target.split("/")[-1]
+                or target
+            ),
+            path=target,
+        )
+E       NameError: name 'Application' is not defined
+
+backend/model/canonical.py:689: NameError
+______________________ test_scan_state_preserves_knowledge_snapshot ______________________
+
+    def test_scan_state_preserves_knowledge_snapshot():
+        from model.scan_state_builder import build_scan_state
+    
+>       report = build_report(
+            {
+                "artifacts": [],
+                "applications": [],
+                "evidence": [],
+            }
+        )
+
+backend/tests/test_knowledge_snapshot.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+backend/analysis/report_builder.py:32: in build_report
+    canonical_scan = build_canonical_scan(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+scan_results = {'artifacts': [], 'applications': [], 'evidence': []}, mosca_inputs = None
+business_context = None
+
+    def build_canonical_scan(
+        scan_results: Dict[str, Any],
+        mosca_inputs: Optional[Dict[str, Any]] = None,
+        business_context: Optional[Dict[str, Any]] = None,
+    ) -> ECDATScan:
+        """
+        Convert the existing scanner output into the canonical ECDAT model.
+        """
+        generated_at = datetime.now(
+            timezone.utc
+        ).isoformat()
+    
+        target = str(
+            scan_results.get(
+                "target",
+                "",
+            )
+        )
+    
+>       application = Application(
+                      ^^^^^^^^^^^
+            application_id=stable_id(
+                "application",
+                target.rstrip("/").split("/")[-1]
+                or "repository",
+            ),
+            name=(
+                target.split("/")[-1]
+                or target
+            ),
+            path=target,
+        )
+E       NameError: name 'Application' is not defined
+
+backend/model/canonical.py:689: NameError
+==================================== warnings summary ====================================
+backend/tests/test_knowledge_api.py:9
+  /home/msp-fsp321/ECDAT/ECDAT1/backend/tests/test_knowledge_api.py:9: StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated; install httpx2 instead.
+    from starlette.testclient import TestClient
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ short test summary info =================================
+FAILED backend/tests/test_knowledge_snapshot.py::test_report_contains_knowledge_snapshot - NameError: name 'Application' is not defined
+FAILED backend/tests/test_knowledge_snapshot.py::test_scan_state_preserves_knowledge_snapshot - NameError: name 'Application' is not defined
+2 failed, 45 passed, 1 warning in 0.29s
+
+=== DIFF CHECK ===
+
+=== STATUS ===
+ M backend/analysis/report_builder.py
+ M backend/model/canonical.py
+ M backend/model/scan_state.py
+ M backend/model/scan_state_builder.py
+ M backend/model/schema.py
+?? backend/tests/test_knowledge_snapshot.py
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+
+Show more
+
+
+ChatGPT said:
+
+Yep. Now we have a different, much cleaner issue. And you're right to make me verify before another edit.
+
+I checked the actual GitHub branch. The canonical file's original import block contains:
+
+Python
+Run
+from model.identity import (
+    build_artifact_id,
+    build_evidence_id,
+)
+
+and the canonical models import Application, CryptoArtifact, ECDATScan, etc. from model.schema.
+
+Your current local refactor accidentally removed that entire schema import block. That's why:
+
+NameError: name 'Application' is not defined
+
+This is not a knowledge-engine failure. It's a missing import caused by our canonical refactor. Python raises this because Application isn't bound in the module namespace when build_canonical_scan() executes. 
+Python documentation
++1
+
+Also, importantly:
+
+45 tests are passing. Only the 2 new snapshot tests fail. So we have not blown up the knowledge subsystem. The failure is at the canonical integration boundary.
+
+I'm NOT giving you another blind edit.
+
+First, let's compare your local import section against GitHub and repair only the missing schema imports.
+
+Run this safe diagnostic only — it changes nothing:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+echo "=== LOCAL CANONICAL IMPORTS ==="
+sed -n '1,45p' backend/model/canonical.py
+
+echo
+echo "=== GIT BASELINE IMPORTS ==="
+git show origin/feature-crypto-knowledge:backend/model/canonical.py | sed -n '1,45p'
+
+echo
+echo "=== CURRENT LOCAL DIFF: IMPORT AREA ==="
+git diff -- backend/model/canonical.py | sed -n '1,180p'
+
+Paste that output.
+
+Then I'll give you one precise replacement, based on the actual local-vs-GitHub difference.
+
+And yes — we're slowing down here deliberately. We already caught two bad repair assumptions. No more guessing.
+
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ cd ~/ECDAT/ECDAT1
+
+echo "=== LOCAL CANONICAL IMPORTS ==="
+sed -n '1,45p' backend/model/canonical.py
+
+echo
+echo "=== GIT BASELINE IMPORTS ==="
+git show origin/feature-crypto-knowledge:backend/model/canonical.py | sed -n '1,45p'
+
+echo
+echo "=== CURRENT LOCAL DIFF: IMPORT AREA ==="
+git diff -- backend/model/canonical.py | sed -n '1,180p'
+=== LOCAL CANONICAL IMPORTS ===
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from analysis.mosca import calculate_mosca_risk
+from analysis.recommendations import (
+    build_recommendation as build_knowledge_recommendation,
+    get_migration_candidates,
+)
+from analysis.quantum_risk import assess_quantum_risk
+
+from model.identity import (
+    build_artifact_id,
+    build_evidence_id,
+)
+
+
+def stable_id(prefix: str, *parts: Any) -> str:
+    """
+    Build a deterministic identifier from stable model attributes.
+    """
+    normalized = ":".join(
+        str(part).strip()
+        for part in parts
+        if part is not None
+    )
+
+    return f"{prefix}:{normalized}"
+
+
+def normalize_confidence(value: Any) -> str:
+    """
+    Normalize confidence values into the canonical string form.
+    """
+    if value is None:
+        return "low"
+
+    if isinstance(value, (int, float)):
+        if value >= 0.9:
+            return "high"
+
+        if value >= 0.6:
+            return "medium"
+
+        return "low"
+
+
+=== GIT BASELINE IMPORTS ===
+fatal: invalid object name 'origin/feature-crypto-knowledge'.
+
+=== CURRENT LOCAL DIFF: IMPORT AREA ===
+diff --git a/backend/model/canonical.py b/backend/model/canonical.py
+index bf6707d..3e4a577 100644
+--- a/backend/model/canonical.py
++++ b/backend/model/canonical.py
+@@ -2,36 +2,16 @@ from datetime import datetime, timezone
+ from typing import Any, Dict, List, Optional
+ 
+ from analysis.mosca import calculate_mosca_risk
+-from analysis.recommendations import get_recommendation
++from analysis.recommendations import (
++    build_recommendation as build_knowledge_recommendation,
++    get_migration_candidates,
++)
+ from analysis.quantum_risk import assess_quantum_risk
+ 
+ from model.identity import (
+     build_artifact_id,
+     build_evidence_id,
+ )
+-from model.relationships import (
+-    build_components,
+-    build_relationships,
+-    map_components_to_artifacts,
+-)
+-from model.schema import (
+-    Algorithm,
+-    Application,
+-    BusinessContext,
+-    CryptoArtifact,
+-    Detection,
+-    ECDATScan,
+-    Evidence,
+-    MigrationOption,
+-    MoscaAssessment,
+-    Purpose,
+-    Recommendation,
+-    Risk,
+-    RiskAssessment,
+-    ScanMetadata,
+-    ScanSummary,
+-    VerificationState,
+-)
+ 
+ 
+ def stable_id(prefix: str, *parts: Any) -> str:
+@@ -382,156 +362,58 @@ def build_mosca_assessment(
+     )
+ 
+ 
+-def classify_recommendation(
++def build_recommendation(
+     artifact: Dict[str, Any],
+-    recommendation_text: str,
+-) -> Dict[str, str]:
++) -> Recommendation:
+     """
+-    Classify the existing recommendation into a semantic category.
++    Project the knowledge-driven recommendation into the canonical model.
+ 
+-    This does not rewrite the recommendation text. It only determines
+-    how the recommendation should be represented in the canonical model.
++    Cryptographic decision logic belongs to analysis/knowledge. The
++    canonical layer stores the resulting decision and its provenance.
+     """
+-    algorithm = str(
+-        artifact.get(
+-            "algorithm",
+-            "",
+-        )
+-    )
+-
+-    text = recommendation_text.lower()
+-
+-    if algorithm in {
+-        "AES",
+-        "SHA-256",
+-        "SHA-384",
+-        "SHA-512",
+-    }:
+-        return {
+-            "category": "monitor",
+-            "priority": "low",
+-            "rationale": (
+-                "The current recommendation does not require "
+-                "an immediate cryptographic migration."
+-            ),
+-        }
+-
+-    if algorithm in {
+-        "MD5",
+-        "SHA-1",
+-        "DES",
+-    }:
+-        return {
+-            "category": "replace",
+-            "priority": "critical",
+-            "rationale": (
+-                "The detected algorithm requires replacement "
+-                "because of inadequate cryptographic security."
+-            ),
+-        }
+-
+-    if algorithm == "ECDSA":
+-        return {
+-            "category": "migrate",
+-            "priority": "high",
+-            "rationale": (
+-                "ECDSA uses public-key cryptography that is "
+-                "vulnerable to sufficiently capable quantum attacks."
+-            ),
+-        }
+-
+-    if algorithm in {
+-        "ECDH",
+-        "Diffie-Hellman",
+-    }:
+-        return {
+-            "category": "migrate",
+-            "priority": "high",
+-            "rationale": (
+-                "The key-establishment mechanism is vulnerable "
+-                "to sufficiently capable quantum attacks."
+-            ),
+-        }
+-
+-    if algorithm == "RSA":
+-        return {
+-            "category": "manual_review",
+-            "priority": "high",
+-            "rationale": (
+-                "RSA migration depends on the cryptographic purpose. "
+-                "The current finding does not establish whether RSA "
+-                "is being used for encryption, key establishment, "
+-                "or digital signatures."
+-            ),
+-        }
+-
+-    if algorithm == "TLS":
+-        return {
+-            "category": "inspect",
+-            "priority": "medium",
+-            "rationale": (
+-                "TLS quantum exposure depends on the configured "
+-                "authentication and key-establishment algorithms."
+-            ),
+-        }
+-
+-    if "replace" in text:
+-        return {
+-            "category": "replace",
+-            "priority": "high",
+-            "rationale": (
+-                "The recommendation explicitly calls for replacement."
+-            ),
+-        }
+-
+-    if "migrat" in text:
+-        return {
+-            "category": "migrate",
+-            "priority": "medium",
+-            "rationale": (
+-                "The recommendation identifies a migration action."
+-            ),
+-        }
++    result = build_knowledge_recommendation(artifact)
+ 
+-    return {
+-        "category": "manual_review",
+-        "priority": "medium",
+-        "rationale": (
+-            "The recommendation requires further cryptographic review."
+-        ),
+-    }
++    category = "manual_review"
++    status = str(result.get("status", "UNRESOLVED")).upper()
+ 
++    if status == "RESOLVED":
++        candidates = result.get("candidates") or []
+ 
+-def build_recommendation(
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+
+
+Show more
+Pasted text.txt
+Document
+Pasted text.txt
+Document
+Pasted text.txt
+Document
+Pasted text (2).txt
+Document
+Pasted text.txt
+Document
+Pasted text.txt
+Document
+
+Good. We have enough to see the shape, and the web check confirms the direction: RFC 10024 is now Standards Track and defines exactly three TLS 1.3 PQ/T hybrids; X25519MLKEM768 is marked Recommended=Y, while the P-256/P-384 hybrids are Recommended=N. 
+RFC Editor
++1
+
+One important correction before we touch code: we should not blindly replace recommendations.py yet. Your output cut off at line 309, which is exactly where the existing candidate/freshness machinery lives. Replacing it now would be me guessing at production code. Bad engineering.
+
+Pass 3A — expose the remaining interfaces
+
+Run this single batch:
+
+Bash
+set -e
+
+cd ~/ECDAT/ECDAT1
+
+echo "=== PASS 3A: EXACT INTEGRATION SURFACE ==="
+
+echo
+echo "--- RECOMMENDATIONS 280-END ---"
+sed -n '280,520p' backend/analysis/recommendations.py
+
+echo
+echo "--- CANONICAL RECOMMENDATION MODEL ---"
+sed -n '70,125p' backend/model/schema.py
+sed -n '370,430p' backend/model/canonical.py
+
+echo
+echo "--- MIGRATION KNOWLEDGE ---"
+sed -n '1,300p' backend/knowledge/migration.py
+
+echo
+echo "--- COMPATIBILITY KNOWLEDGE ---"
+sed -n '1,320p' backend/knowledge/compatibility.py
+
+echo
+echo "--- PROTOCOL KNOWLEDGE ---"
+grep -Rni \
+  -E "protocol|ProtocolApplicability|protocols" \
+  backend/knowledge backend/api backend/tests \
+  --exclude-dir=__pycache__ | head -180
+
+echo
+echo "--- REGISTRY MANIFEST / LOADING ---"
+grep -n -A80 -B20 \
+  "KnowledgeManifest\\|KnowledgeRegistry\\|protocols" \
+  backend/knowledge/registry.py
+
+echo
+echo "--- CURRENT KNOWLEDGE DATA COUNTS ---"
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python - <<'PY'
+from knowledge.service import KnowledgeService
+
+s = KnowledgeService()
+
+print("version:", s.version)
+print("hash:", s.integrity_hash)
+print("algorithms:", len(s.algorithms()))
+print("standards:", len(s.standards()))
+print("migrations:", len(s.migrations()))
+print("compatibility:", len(s.compatibility()))
+print("protocols:", len(s.protocols()))
+print("conflicts:", len(s.conflicts()))
+
+for p in s.protocols():
+    print(
+        "PROTOCOL",
+        p.algorithm,
+        p.protocol,
+        p.protocol_version,
+        p.usage,
+        p.status,
+        "recommended=", p.recommended,
+        "dtls_ok=", p.dtls_ok,
+    )
+PY
+
+echo
+echo "--- STATUS ---"
+git status --short
+
+Paste that output.
+
+Then we're going straight into Pass 3B: scored candidates + protocol-aware recommendation reasoning + stale recommendation invalidation, with tests in the same batch.
+
+And we're keeping one principle non-negotiable: ECDAT must explain why candidate A beat candidate B. A recommendation score without evidence is just a prettier lookup table.
+
+Pasted text.txt
+Document
+Web search
+ 
+
+Yes. I reviewed the uploaded output and checked the current NIST position as well. Your regression is clean: 54 backend tests + frontend production build pass, and the uploaded diff shows the recommendation/canonical layers have already been successfully moved away from the old algorithm-specific branching. 
+
+Pasted text
+
+The external research also changes one thing we should account for now: NIST's 2026 material says ML-KEM, ML-DSA and SLH-DSA are the foundation for most deployments, while HQC is an additional standardized candidate and FALCON is still progressing toward another standard. 
+NIST Computer Security Resource Center
++1
+
+So don't add arbitrary candidates just to make the UI look clever. Candidate scoring needs to distinguish standardized, selected/ongoing, hybrid, and merely known mechanisms.
+
+Pass 3 direction
+
+Your current architecture is ready for this:
+
+Artifact
+   ↓
+Knowledge Resolution
+   ↓
+Migration Relationships
+   ↓
+Compatibility
+   ↓
+Protocol Applicability
+   ↓
+Standards / Lifecycle / Quantum posture
+   ↓
+Candidate Scoring
+   ↓
+Evidence-backed explanation
+   ↓
+Recommendation
+   ↓
+Knowledge snapshot
+
+The key output becomes:
+
+JSON
+{
+  "target_algorithm": "X25519MLKEM768",
+  "score": 94,
+  "decision": "preferred",
+  "reasons": [
+    "hybrid migration relationship",
+    "TLS 1.3 applicable",
+    "protocol marked recommended",
+    "quantum-resistant target",
+    "high-confidence knowledge"
+  ],
+  "constraints": [],
+  "knowledge_version": "0.5.0",
+  "knowledge_hash": "..."
+}
+
+And a weaker candidate isn't simply hidden. It gets an explicit penalty:
+
+JSON
+{
+  "target_algorithm": "SecP256r1MLKEM768",
+  "score": 78,
+  "decision": "alternative",
+  "reasons": [
+    "TLS 1.3 applicable",
+    "hybrid migration relationship"
+  ],
+  "penalties": [
+    "protocol recommendation flag is negative"
+  ]
+}
+
+That's much more defensible than “ECDH → ML-KEM because I said so.”
+
+One thing I want fixed before scoring
+
+Your uploaded diff shows canonical.py was substantially rewritten — 507 lines changed — while the tests still pass. 
+
+Pasted text
+
+ That's fine, but we're not going to pile another huge rewrite on top of it.
+
+Run only this now:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+echo "===== PASS 3 — CURRENT CANDIDATE OUTPUT ====="
+
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python - <<'PY'
+from analysis.recommendations import build_recommendation
+from knowledge.service import KnowledgeService
+
+service = KnowledgeService()
+
+print("KNOWLEDGE", service.version)
+print("HASH", service.integrity_hash)
+
+for algorithm, purpose in [
+    ("RSA", "digital_signature"),
+    ("RSA", "key_establishment"),
+    ("ECDH", "key_establishment"),
+    ("ECDSA", "digital_signature"),
+]:
+    print("\n===", algorithm, purpose, "===")
+
+    result = build_recommendation({
+        "algorithm": algorithm,
+        "purpose": purpose,
+        "risk": {"quantum": {"level": "HIGH"}},
+    })
+
+    print("status:", result.get("status"))
+    print("category:", result.get("category"))
+    print("priority:", result.get("priority"))
+    print("explainability:", result.get("explainability"))
+
+    for candidate in result.get("candidates", []):
+        print(
+            candidate.get("relationship_id"),
+            "=>",
+            candidate.get("target_algorithm"),
+            "| type=",
+            candidate.get("relationship_type"),
+            "| hybrid=",
+            candidate.get("hybrid"),
+            "| confidence=",
+            candidate.get("confidence"),
+        )
+
+print("\n=== PROTOCOL RECORDS ===")
+for protocol in service.protocols():
+    print(
+        protocol.algorithm,
+        "|",
+        protocol.protocol,
+        protocol.protocol_version,
+        "| usage=",
+        protocol.usage,
+        "| status=",
+        protocol.status,
+        "| recommended=",
+        protocol.recommended,
+        "| dtls_ok=",
+        protocol.dtls_ok,
+    )
+PY
+
+Paste that output.
+
+Then I can make the scoring engine against the actual candidate structures, not a hallucinated version of your code.
+
+And yes: we're building the serious version. NIST's current guidance explicitly pushes organizations toward migration now and emphasizes identifying vulnerable algorithms and planning replacement/update, which is exactly where ECDAT's discovery → prioritization → recommendation pipeline needs to become differentiated. 
+NIST Computer Security Resource Center
+
+Sources
+Today 10:53 AM
+Web search
+ Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ModuleNotFoundError: No module named 'analysis'
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ ^C
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+
+Something went wrong. Please try again.
+
+Message delivery timed out. Please try again.
+
+Retry
+ChatGPT can make mistakes. Check important info.
+
+﻿
+Web search
+ 
+
+Think

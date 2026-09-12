@@ -1,0 +1,154 @@
+Yes. I reviewed the uploaded output and checked the current NIST position as well. Your regression is clean: 54 backend tests + frontend production build pass, and the uploaded diff shows the recommendation/canonical layers have already been successfully moved away from the old algorithm-specific branching. 
+
+Pasted text
+
+The external research also changes one thing we should account for now: NIST's 2026 material says ML-KEM, ML-DSA and SLH-DSA are the foundation for most deployments, while HQC is an additional standardized candidate and FALCON is still progressing toward another standard. 
+NIST Computer Security Resource Center
++1
+
+So don't add arbitrary candidates just to make the UI look clever. Candidate scoring needs to distinguish standardized, selected/ongoing, hybrid, and merely known mechanisms.
+
+Pass 3 direction
+
+Your current architecture is ready for this:
+
+Artifact
+   ↓
+Knowledge Resolution
+   ↓
+Migration Relationships
+   ↓
+Compatibility
+   ↓
+Protocol Applicability
+   ↓
+Standards / Lifecycle / Quantum posture
+   ↓
+Candidate Scoring
+   ↓
+Evidence-backed explanation
+   ↓
+Recommendation
+   ↓
+Knowledge snapshot
+
+
+The key output becomes:
+
+{
+  "target_algorithm": "X25519MLKEM768",
+  "score": 94,
+  "decision": "preferred",
+  "reasons": [
+    "hybrid migration relationship",
+    "TLS 1.3 applicable",
+    "protocol marked recommended",
+    "quantum-resistant target",
+    "high-confidence knowledge"
+  ],
+  "constraints": [],
+  "knowledge_version": "0.5.0",
+  "knowledge_hash": "..."
+}
+
+
+And a weaker candidate isn't simply hidden. It gets an explicit penalty:
+
+{
+  "target_algorithm": "SecP256r1MLKEM768",
+  "score": 78,
+  "decision": "alternative",
+  "reasons": [
+    "TLS 1.3 applicable",
+    "hybrid migration relationship"
+  ],
+  "penalties": [
+    "protocol recommendation flag is negative"
+  ]
+}
+
+
+That's much more defensible than “ECDH → ML-KEM because I said so.”
+
+One thing I want fixed before scoring
+
+Your uploaded diff shows canonical.py was substantially rewritten — 507 lines changed — while the tests still pass. 
+
+Pasted text
+
+ That's fine, but we're not going to pile another huge rewrite on top of it.
+
+Run only this now:
+
+cd ~/ECDAT/ECDAT1
+
+echo "===== PASS 3 — CURRENT CANDIDATE OUTPUT ====="
+
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python - <<'PY'
+from analysis.recommendations import build_recommendation
+from knowledge.service import KnowledgeService
+
+service = KnowledgeService()
+
+print("KNOWLEDGE", service.version)
+print("HASH", service.integrity_hash)
+
+for algorithm, purpose in [
+    ("RSA", "digital_signature"),
+    ("RSA", "key_establishment"),
+    ("ECDH", "key_establishment"),
+    ("ECDSA", "digital_signature"),
+]:
+    print("\n===", algorithm, purpose, "===")
+
+    result = build_recommendation({
+        "algorithm": algorithm,
+        "purpose": purpose,
+        "risk": {"quantum": {"level": "HIGH"}},
+    })
+
+    print("status:", result.get("status"))
+    print("category:", result.get("category"))
+    print("priority:", result.get("priority"))
+    print("explainability:", result.get("explainability"))
+
+    for candidate in result.get("candidates", []):
+        print(
+            candidate.get("relationship_id"),
+            "=>",
+            candidate.get("target_algorithm"),
+            "| type=",
+            candidate.get("relationship_type"),
+            "| hybrid=",
+            candidate.get("hybrid"),
+            "| confidence=",
+            candidate.get("confidence"),
+        )
+
+print("\n=== PROTOCOL RECORDS ===")
+for protocol in service.protocols():
+    print(
+        protocol.algorithm,
+        "|",
+        protocol.protocol,
+        protocol.protocol_version,
+        "| usage=",
+        protocol.usage,
+        "| status=",
+        protocol.status,
+        "| recommended=",
+        protocol.recommended,
+        "| dtls_ok=",
+        protocol.dtls_ok,
+    )
+PY
+
+
+Paste that output.
+
+Then I can make the scoring engine against the actual candidate structures, not a hallucinated version of your code.
+
+And yes: we're building the serious version. NIST's current guidance explicitly pushes organizations toward migration now and emphasizes identifying vulnerable algorithms and planning replacement/update, which is exactly where ECDAT's discovery → prioritization → recommendation pipeline needs to become differentiated. 
+NIST Computer Security Resource Center
+
+Sources

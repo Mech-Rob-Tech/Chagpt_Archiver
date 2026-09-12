@@ -1,0 +1,31 @@
+1787635543547	Sync.LogManager	DEBUG	Flushing file log
+1787635543564	Sync.LogManager	DEBUG	Log cleanup threshold time: 1786771543564
+1787635543565	Sync.LogManager	DEBUG	Done deleting files.
+1787635544015	Services.Common.RESTRequest	DEBUG	GET https://profile.accounts.firefox.com/v1/profile 304
+1787635642795	Sync.SyncScheduler	DEBUG	Network link status changed to "down". Offline?: false
+1787635642795	Sync.SyncScheduler	DEBUG	Clearing sync triggers and the global score.
+1787635642796	Sync.SyncScheduler	DEBUG	Clearing sync triggers and the global score.
+1787635642799	Sync.SyncScheduler	DEBUG	Network link status changed to "changed". Offline?: false
+1787639953875	Sync.SyncScheduler	DEBUG	Network link status changed to "changed". Offline?: false
+1787639958430	Sync.SyncScheduler	DEBUG	Network link status changed to "up". Offline?: false
+1787639958430	Sync.SyncScheduler	DEBUG	Network link looks up. Syncing.
+1787639958432	Sync.SyncScheduler	DEBUG	Clearing sync triggers and the global score.
+1787639958433	Sync.SyncScheduler	DEBUG	Network link status changed to "changed". Offline?: false
+1787639958434	Sync.Service	DEBUG	User-Agent: Firefox/147.0.3 (Linux x86_64) FxSync/1.149.0.20260204004611.desktop
+1787639958434	Sync.Service	INFO	Starting sync at 2026-08-25 12:09:18 in browser session aCOni0p0HXZq
+1787639958434	Sync.Service	DEBUG	In sync: should login.
+1787639958434	Sync.Service	INFO	User logged in successfully - verifying login.
+1787639958435	FirefoxAccounts	DEBUG	FxAccountsProfileClient: Requested profile
+1787639958435	FirefoxAccounts	DEBUG	getOAuthToken enter
+1787639958435	Sync.SyncAuthManager	DEBUG	unlockAndVerifyAuthState finds that sync isn't configured
+1787639958435	Sync.Status	DEBUG	Status.login: error.login.reason.no_username => error.login.reason.no_username
+1787639958435	Sync.Status	DEBUG	Status.service: service.client_not_configured => service.client_not_configured
+1787639958435	Sync.Service	DEBUG	Fetching unlocked auth state returned error.login.reason.no_username
+1787639958435	Sync.ErrorHandler	ERROR	Sync encountered a login error
+1787639958435	Sync.SyncScheduler	DEBUG	Clearing sync triggers and the global score.
+1787639958435	Sync.SyncScheduler	DEBUG	Clearing sync triggers and the global score.
+1787639958435	Sync.Service	DEBUG	Exception calling WrappedLock: Error: Login failed: error.login.reason.no_username(resource://services-sync/service.sys.mjs:1060:15) JS Stack trace: onNotify@service.sys.mjs:1060:15
+1787639958435	FirefoxAccounts	TRACE	getCachedToken returning cached token
+1787639958435	FirefoxAccounts	DEBUG	getOAuthToken returning a cached token
+1787639958435	Sync.Service	DEBUG	Not syncing: login returned false.
+1787639958436	Services.Common.RESTRequest	DEBUG	GET request to https://profile.accounts.firefox.com/v1/profile

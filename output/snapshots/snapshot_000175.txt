@@ -1,0 +1,447 @@
+SIH
+Share
+ChatGPT said:
+
+Good. This is actually progress. We fixed the previous import damage, and now:
+
+compileall passes.
+
+47/47 knowledge tests pass.
+
+Only the integration smoke test is failing.
+
+The new failure is another missing symbol from the canonical refactor:
+
+NameError: name 'build_verification_state' is not defined
+
+Python's NameError simply means the function name is being used but isn't bound/imported in the module. 
+Python documentation
++1
+
+And I checked the GitHub baseline before telling you what to do next. The important point is: we should restore the canonical helper/import from the repository, not invent a replacement.
+
+First, one precise diagnostic
+
+Run this only:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+echo "=== LOCAL REFERENCES ==="
+grep -n "build_verification_state" backend/model/canonical.py
+
+echo
+echo "=== LOCAL FUNCTION DEFINITIONS ==="
+grep -R -n "def build_verification_state" backend
+
+echo
+echo "=== GIT BASELINE REFERENCES ==="
+git show feature/crypto-knowledge:backend/model/canonical.py | grep -n "build_verification_state"
+
+Paste that output.
+
+Don't edit anything yet.
+
+We're now systematically restoring only symbols that the original canonical assembly depended on. No more guessing, no more broad rewrites. The fact that 47 tests are already green means the knowledge engine itself is intact; we're cleaning up the integration boundary.
+
+Yesterday 11:19 PM
+...............................................                                    [100%]
+==================================== warnings summary ====================================
+backend/tests/test_knowledge_api.py:9
+  /home/msp-fsp321/ECDAT/ECDAT1/backend/tests/test_knowledge_api.py:9: StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated; install httpx2 instead.
+    from starlette.testclient import TestClient
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+47 passed, 1 warning in 0.24s
+
+=== DIFF CHECK ===
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ cd ~/ECDAT/ECDAT1
+
+echo "=== LOCAL REFERENCES ==="
+grep -n "build_verification_state" backend/model/canonical.py
+
+echo
+echo "=== LOCAL FUNCTION DEFINITIONS ==="
+grep -R -n "def build_verification_state" backend
+
+echo
+echo "=== GIT BASELINE REFERENCES ==="
+git show feature/crypto-knowledge:backend/model/canonical.py | grep -n "build_verification_state"
+=== LOCAL REFERENCES ===
+922:            build_verification_state(
+
+=== LOCAL FUNCTION DEFINITIONS ===
+
+=== GIT BASELINE REFERENCES ===
+709:def build_verification_state(
+1097:            build_verification_state(
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+
+Show more
+
+Perfect. Now we have definitive proof.
+
+Your local canonical.py has a call at line 922, but the function definition was deleted. The GitHub baseline has the exact missing function at line 709, and the call at 1097. So this is another casualty of the earlier broad block replacement—not a new design problem.
+
+We should restore that exact function from the repository baseline, then rerun the pipeline. No improvisation.
+
+Run:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+python - <<'PY'
+import subprocess
+from pathlib import Path
+
+p = Path("backend/model/canonical.py")
+local = p.read_text()
+
+baseline = subprocess.check_output(
+    ["git", "show", "feature/crypto-knowledge:backend/model/canonical.py"],
+    text=True,
+)
+
+start = baseline.index("def build_verification_state(")
+end = baseline.index("\ndef build_canonical_scan(", start)
+
+function = baseline[start:end]
+
+if "def build_verification_state(" in local:
+    print("build_verification_state already exists; refusing to modify.")
+else:
+    marker = "\ndef build_canonical_scan("
+    if marker not in local:
+        raise RuntimeError("Could not locate build_canonical_scan()")
+    local = local.replace(marker, "\n" + function + marker, 1)
+    p.write_text(local)
+    print("Restored build_verification_state() from Git baseline.")
+PY
+
+echo "=== COMPILE ==="
+python -m compileall -q backend
+
+echo
+echo "=== PIPELINE SMOKE TEST ==="
+python - <<'PY'
+import sys
+sys.path.insert(0, "backend")
+
+from scanner.crypto_scanner import scan_repository
+from model.canonical import build_canonical_scan
+
+result = scan_repository("backend/demo_repo")
+scan = build_canonical_scan(result)
+
+print("Artifacts:", len(scan.artifacts))
+print("Applications:", len(scan.applications))
+print("Recommendations:", len(scan.recommendations))
+print("Migration options:", len(scan.migration_options))
+print("Verification states:", len(scan.verification_states))
+print("PASS: canonical pipeline assembled")
+PY
+
+echo
+echo "=== FULL BACKEND TESTS ==="
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q backend/tests
+
+echo
+echo "=== DIFF CHECK ==="
+git diff --check
+Important
+
+We're now doing this safely from your actual Git baseline:
+
+Git baseline
+    ↓
+restore missing helper only
+    ↓
+your knowledge-driven refactor remains untouched
+    ↓
+compile
+    ↓
+integration
+    ↓
+47+ tests
+
+The baseline confirms build_verification_state() is a canonical helper, so restoring it is the correct move.
+
+If this passes, we stop repairing missing functions and inspect the resulting canonical diff as a whole before making another architectural change.
+
+Pasted text.txt
+Document
+Pasted text.txt
+Document
+Pasted text.txt
+Document
+Pasted text (2).txt
+Document
+Pasted text.txt
+Document
+Pasted text.txt
+Document
+
+Good. We have enough to see the shape, and the web check confirms the direction: RFC 10024 is now Standards Track and defines exactly three TLS 1.3 PQ/T hybrids; X25519MLKEM768 is marked Recommended=Y, while the P-256/P-384 hybrids are Recommended=N. 
+RFC Editor
++1
+
+One important correction before we touch code: we should not blindly replace recommendations.py yet. Your output cut off at line 309, which is exactly where the existing candidate/freshness machinery lives. Replacing it now would be me guessing at production code. Bad engineering.
+
+Pass 3A — expose the remaining interfaces
+
+Run this single batch:
+
+Bash
+set -e
+
+cd ~/ECDAT/ECDAT1
+
+echo "=== PASS 3A: EXACT INTEGRATION SURFACE ==="
+
+echo
+echo "--- RECOMMENDATIONS 280-END ---"
+sed -n '280,520p' backend/analysis/recommendations.py
+
+echo
+echo "--- CANONICAL RECOMMENDATION MODEL ---"
+sed -n '70,125p' backend/model/schema.py
+sed -n '370,430p' backend/model/canonical.py
+
+echo
+echo "--- MIGRATION KNOWLEDGE ---"
+sed -n '1,300p' backend/knowledge/migration.py
+
+echo
+echo "--- COMPATIBILITY KNOWLEDGE ---"
+sed -n '1,320p' backend/knowledge/compatibility.py
+
+echo
+echo "--- PROTOCOL KNOWLEDGE ---"
+grep -Rni \
+  -E "protocol|ProtocolApplicability|protocols" \
+  backend/knowledge backend/api backend/tests \
+  --exclude-dir=__pycache__ | head -180
+
+echo
+echo "--- REGISTRY MANIFEST / LOADING ---"
+grep -n -A80 -B20 \
+  "KnowledgeManifest\\|KnowledgeRegistry\\|protocols" \
+  backend/knowledge/registry.py
+
+echo
+echo "--- CURRENT KNOWLEDGE DATA COUNTS ---"
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python - <<'PY'
+from knowledge.service import KnowledgeService
+
+s = KnowledgeService()
+
+print("version:", s.version)
+print("hash:", s.integrity_hash)
+print("algorithms:", len(s.algorithms()))
+print("standards:", len(s.standards()))
+print("migrations:", len(s.migrations()))
+print("compatibility:", len(s.compatibility()))
+print("protocols:", len(s.protocols()))
+print("conflicts:", len(s.conflicts()))
+
+for p in s.protocols():
+    print(
+        "PROTOCOL",
+        p.algorithm,
+        p.protocol,
+        p.protocol_version,
+        p.usage,
+        p.status,
+        "recommended=", p.recommended,
+        "dtls_ok=", p.dtls_ok,
+    )
+PY
+
+echo
+echo "--- STATUS ---"
+git status --short
+
+Paste that output.
+
+Then we're going straight into Pass 3B: scored candidates + protocol-aware recommendation reasoning + stale recommendation invalidation, with tests in the same batch.
+
+And we're keeping one principle non-negotiable: ECDAT must explain why candidate A beat candidate B. A recommendation score without evidence is just a prettier lookup table.
+
+Pasted text.txt
+Document
+Web search
+ 
+
+Yes. I reviewed the uploaded output and checked the current NIST position as well. Your regression is clean: 54 backend tests + frontend production build pass, and the uploaded diff shows the recommendation/canonical layers have already been successfully moved away from the old algorithm-specific branching. 
+
+Pasted text
+
+The external research also changes one thing we should account for now: NIST's 2026 material says ML-KEM, ML-DSA and SLH-DSA are the foundation for most deployments, while HQC is an additional standardized candidate and FALCON is still progressing toward another standard. 
+NIST Computer Security Resource Center
++1
+
+So don't add arbitrary candidates just to make the UI look clever. Candidate scoring needs to distinguish standardized, selected/ongoing, hybrid, and merely known mechanisms.
+
+Pass 3 direction
+
+Your current architecture is ready for this:
+
+Artifact
+   ↓
+Knowledge Resolution
+   ↓
+Migration Relationships
+   ↓
+Compatibility
+   ↓
+Protocol Applicability
+   ↓
+Standards / Lifecycle / Quantum posture
+   ↓
+Candidate Scoring
+   ↓
+Evidence-backed explanation
+   ↓
+Recommendation
+   ↓
+Knowledge snapshot
+
+The key output becomes:
+
+JSON
+{
+  "target_algorithm": "X25519MLKEM768",
+  "score": 94,
+  "decision": "preferred",
+  "reasons": [
+    "hybrid migration relationship",
+    "TLS 1.3 applicable",
+    "protocol marked recommended",
+    "quantum-resistant target",
+    "high-confidence knowledge"
+  ],
+  "constraints": [],
+  "knowledge_version": "0.5.0",
+  "knowledge_hash": "..."
+}
+
+And a weaker candidate isn't simply hidden. It gets an explicit penalty:
+
+JSON
+{
+  "target_algorithm": "SecP256r1MLKEM768",
+  "score": 78,
+  "decision": "alternative",
+  "reasons": [
+    "TLS 1.3 applicable",
+    "hybrid migration relationship"
+  ],
+  "penalties": [
+    "protocol recommendation flag is negative"
+  ]
+}
+
+That's much more defensible than “ECDH → ML-KEM because I said so.”
+
+One thing I want fixed before scoring
+
+Your uploaded diff shows canonical.py was substantially rewritten — 507 lines changed — while the tests still pass. 
+
+Pasted text
+
+ That's fine, but we're not going to pile another huge rewrite on top of it.
+
+Run only this now:
+
+Bash
+cd ~/ECDAT/ECDAT1
+
+echo "===== PASS 3 — CURRENT CANDIDATE OUTPUT ====="
+
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python - <<'PY'
+from analysis.recommendations import build_recommendation
+from knowledge.service import KnowledgeService
+
+service = KnowledgeService()
+
+print("KNOWLEDGE", service.version)
+print("HASH", service.integrity_hash)
+
+for algorithm, purpose in [
+    ("RSA", "digital_signature"),
+    ("RSA", "key_establishment"),
+    ("ECDH", "key_establishment"),
+    ("ECDSA", "digital_signature"),
+]:
+    print("\n===", algorithm, purpose, "===")
+
+    result = build_recommendation({
+        "algorithm": algorithm,
+        "purpose": purpose,
+        "risk": {"quantum": {"level": "HIGH"}},
+    })
+
+    print("status:", result.get("status"))
+    print("category:", result.get("category"))
+    print("priority:", result.get("priority"))
+    print("explainability:", result.get("explainability"))
+
+    for candidate in result.get("candidates", []):
+        print(
+            candidate.get("relationship_id"),
+            "=>",
+            candidate.get("target_algorithm"),
+            "| type=",
+            candidate.get("relationship_type"),
+            "| hybrid=",
+            candidate.get("hybrid"),
+            "| confidence=",
+            candidate.get("confidence"),
+        )
+
+print("\n=== PROTOCOL RECORDS ===")
+for protocol in service.protocols():
+    print(
+        protocol.algorithm,
+        "|",
+        protocol.protocol,
+        protocol.protocol_version,
+        "| usage=",
+        protocol.usage,
+        "| status=",
+        protocol.status,
+        "| recommended=",
+        protocol.recommended,
+        "| dtls_ok=",
+        protocol.dtls_ok,
+    )
+PY
+
+Paste that output.
+
+Then I can make the scoring engine against the actual candidate structures, not a hallucinated version of your code.
+
+And yes: we're building the serious version. NIST's current guidance explicitly pushes organizations toward migration now and emphasizes identifying vulnerable algorithms and planning replacement/update, which is exactly where ECDAT's discovery → prioritization → recommendation pipeline needs to become differentiated. 
+NIST Computer Security Resource Center
+
+Sources
+Today 10:53 AM
+Web search
+ Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ModuleNotFoundError: No module named 'analysis'
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ ^C
+(base) msp-fsp321@MSP-FSP:~/ECDAT/ECDAT1$ 
+
+Something went wrong. Please try again.
+
+Message delivery timed out. Please try again.
+
+Retry
+ChatGPT can make mistakes. Check important info.
+
+﻿
+Web search
+ 
+
+Think
